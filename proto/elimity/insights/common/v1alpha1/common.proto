@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message AttributeAssignment {
+  string attribute_type_id = 1;
+  Value value = 2;
+}
+
+message Entity {
+  repeated AttributeAssignment assignments = 1;
+  string id = 2;
+  string name = 3;
+  string type = 4;
+}
+
+message Relationship {
+  repeated AttributeAssignment assignments = 1;
+  string from_entity_id = 2;
+  string from_entity_type = 3;
+  string to_entity_id = 4;
+  string to_entity_type = 5;
+}
+
+message Value {
+  oneof value {
+    bool boolean = 1;
+    google.protobuf.Timestamp date = 2;
+    google.protobuf.Timestamp date_time = 3;
+    double number = 4;
+    string string = 5;
+    google.protobuf.Timestamp time = 6;
+  }
+}
+
+option go_package = "github.com/elimity-com/insights-sdk/gen/elimity/insights/common/v1alpha1";
+
+package elimity.insights.common.v1alpha1;

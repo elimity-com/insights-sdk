@@ -1,0 +1,18 @@
+plugins:
+  - opt: target=ts
+    out: gen
+    remote: buf.build/connectrpc/es:v1.5.0
+    revision: 1
+  - opt: target=ts
+    out: gen
+    remote: buf.build/bufbuild/es:v1.10.0
+    revision: 1
+  - out: gen
+    opt: paths=source_relative
+    remote: buf.build/connectrpc/go:v1.16.2
+    revision: 1
+  - out: gen
+    opt: paths=source_relative
+    remote: buf.build/protocolbuffers/go:v1.34.1
+    revision: 1
+version: v2

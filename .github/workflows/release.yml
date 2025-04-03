@@ -1,0 +1,15 @@
+jobs:
+  job:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm version --no-git-tag-version ${{ github.event.release.tag_name }}
+      - run: npx tsc
+      - run: env NPM_CONFIG_//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }} npm publish --access public
+
+on:
+  release:
+    types:
+      - published

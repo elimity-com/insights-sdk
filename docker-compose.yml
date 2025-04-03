@@ -1,0 +1,8 @@
+services:
+  dev:
+    entrypoint: sleep infinity
+    image: ghcr.io/elimity-com/insights-sdk:14245239418
+    init: true
+    volumes:
+      - .:/app
+    working_dir: /app
