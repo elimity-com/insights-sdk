@@ -16,36 +16,40 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/elimity-com/insights-client-go/v7"
-	"github.com/elimity-com/insights-sdk"
+	commonv1alpha1 "github.com/elimity-com/insights-sdk/gen/elimity/insights/common/v1alpha1"
+	customgatewayv1alpha1 "github.com/elimity-com/insights-sdk/gen/elimity/insights/customgateway/v1alpha1"
 	"iter"
 	"os"
 )
 
-func generateItems(bytes []byte) iter.Seq2[any, error] {
-	return itemGenerator{bytes: bytes}.generate
+func generateResponses(bytes []byte) iter.Seq2[*customgatewayv1alpha1.PerformImportResponse, error] {
+	return responseGenerator{bytes: bytes}.generate
 }
 
 func main() {
-	insightssdk.ServeGateway(generateItems)
+	insightssdk.ServeGateway(generateResponses)
 }
 
-type itemGenerator struct {
+type responseGenerator struct {
 	bytes []byte
 }
 
-func (g itemGenerator) generate(yield func(any, error) bool) {
+func (g responseGenerator) generate(yield func(*customgatewayv1alpha1.PerformImportResponse, error) bool) {
 	var request request
 	if err := json.Unmarshal(g.bytes, &request); err != nil {
 		err := fmt.Errorf("failed unmarshalling request: %v", err)
 		yield(nil, err)
 		return
 	}
-	log := insights.ConnectorLog{
-		Level:   "info",
+	info := &customgatewayv1alpha1.Level_Info{}
+	level := &customgatewayv1alpha1.Level{Value: info}
+	log := &customgatewayv1alpha1.Log{
+		Level:   level,
 		Message: "Reading directory contents",
 	}
-	if !yield(log, nil) {
+	lo := &customgatewayv1alpha1.PerformImportResponse_Log{Log: log}
+	response := &customgatewayv1alpha1.PerformImportResponse{Value: lo}
+	if !yield(response, nil) {
 		return
 	}
 	files, err := os.ReadDir(request.Path)
@@ -55,12 +59,14 @@ func (g itemGenerator) generate(yield func(any, error) bool) {
 		return
 	}
 	for _, file := range files {
-		entity := insights.Entity{
-			ID:   file,
-			Name: file,
-			Type: "file",
+		entity := &commonv1alpha1.Entity{
+			Id:          item.ID,
+			Name:        item.Name,
+			Type:        item.Type,
 		}
-		if !yield(entity, nil) {
+		ent := &customgatewayv1alpha1.PerformImportResponse_Entity{Entity: entity}
+		response := &customgatewayv1alpha1.PerformImportResponse{Value: ent}
+		if !yield(response, nil) {
 			return
 		}
 	}
@@ -73,40 +79,7 @@ type request struct {
 
 ### NodeJS
 
-```typescript
-import { Item, ItemType, Level, serveGateway } from "@elimity/insights-sdk";
-import { AttributeAssignment } from "@elimity/insights-client";
-import { JsonValue } from "@bufbuild/protobuf";
-import { readdir } from "node:fs/promises";
-
-async function* generateItems(
-  fields: Record<string, JsonValue>,
-): AsyncGenerator<Item> {
-  const path = fields["path"];
-  if (typeof path != "string") throw new Error("got invalid request");
-  yield {
-    level: Level.Info,
-    message: "Reading directory contents",
-    type: ItemType.Log,
-  };
-  const files = await readdir(path);
-  for (const file of files) {
-    const assignments: AttributeAssignment[] = [];
-    const entity = {
-      attributeAssignments: assignments,
-      id: file,
-      name: file,
-      type: "file",
-    };
-    yield {
-      entity,
-      type: ItemType.Entity,
-    };
-  }
-}
-
-serveGateway(generateItems);
-```
+TODO
 
 ## Installation
 
@@ -126,4 +99,4 @@ $ npm i @elimity/insights-sdk
 
 | Client version | Insights version |
 | -------------- | ---------------- |
-| 1              | >=3.41           |
+| 1              | >=3.42           |

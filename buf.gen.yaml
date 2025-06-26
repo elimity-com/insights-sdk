@@ -1,11 +1,10 @@
+clean: true
 plugins:
-  - opt: target=ts
+  - opt:
+      - import_extension=js
+      - target=ts
     out: gen
-    remote: buf.build/connectrpc/es:v1.5.0
-    revision: 1
-  - opt: target=ts
-    out: gen
-    remote: buf.build/bufbuild/es:v1.10.0
+    remote: buf.build/bufbuild/es:v2.5.2
     revision: 1
   - out: gen
     opt: paths=source_relative
