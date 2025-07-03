@@ -1,0 +1,71 @@
+jobs:
+  arrange:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: test -z "$(goarrange run -d)"
+
+  buf-generate:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npx buf generate
+      - run: git -c safe.directory=/__w/insights-sdk/insights-sdk diff --quiet
+
+  buf-lint:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npx buf lint
+
+  eslint:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npx eslint .
+
+  golangci-lint:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: GOFLAGS='-buildvcs=false' golangci-lint run
+
+  prettier:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npx prettier -c .
+
+  test:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: go test -v ./...
+
+  tidy:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: go mod tidy -diff
+
+  tsc:
+    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npx tsc
+
+on: pull_request

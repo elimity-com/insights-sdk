@@ -1,0 +1,24 @@
+{
+  "devDependencies": {
+    "@bufbuild/buf": "^1.51.0",
+    "@types/lodash": "^4.17.20",
+    "@types/node": "^22.15.33",
+    "@typescript-eslint/eslint-plugin": "^8.29.0",
+    "@typescript-eslint/parser": "^8.29.0",
+    "eslint": "^8.57.1",
+    "prettier": "^3.5.3"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^1.10.1",
+    "@connectrpc/connect": "^1.6.1",
+    "@connectrpc/connect-node": "^1.6.1",
+    "lodash": "^4.17.21"
+  },
+  "exports": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "license": "Apache-2.0",
+  "name": "@elimity/insights-sdk",
+  "repository": "elimity-com/insights-sdk"
+}

@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+import "elimity/insights/common/v1alpha1/common.proto";
+
+message ExportRequest {
+  int64 api_token_id = 1;
+  bytes api_token_secret = 2;
+  repeated Target targets = 3;
+}
+
+message ExportResponse {
+  Item item = 1;
+  int64 target_index = 2;
+}
+
+message Filter {
+  oneof value {
+    string entity_type = 1;
+    RelationshipType relationship_type = 2;
+  }
+}
+
+message Item {
+  oneof value {
+    common.v1alpha1.Entity entity = 1;
+    common.v1alpha1.Relationship relationship = 2;
+  }
+}
+
+message RelationshipType {
+  string from_entity_type = 1;
+  string to_entity_type = 2;
+}
+
+message Target {
+  Filter filter = 1;
+  int64 source_id = 2;
+}
+
+option go_package = "github.com/elimity-com/insights-sdk/gen/elimity/insights/export/v1alpha1";
+
+package elimity.insights.export.v1alpha1;
+
+service Service {
+  rpc Export(ExportRequest) returns (stream ExportResponse);
+}
