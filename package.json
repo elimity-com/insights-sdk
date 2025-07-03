@@ -12,7 +12,10 @@
     "@connectrpc/connect": "^1.6.1",
     "@connectrpc/connect-node": "^1.6.1"
   },
-  "exports": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./*": "./dist/*.js"
+  },
   "files": [
     "dist"
   ],
