@@ -14,10 +14,7 @@
     "@connectrpc/connect-node": "^1.6.1",
     "lodash": "^4.17.21"
   },
-  "exports": {
-    ".": "./dist/index.js",
-    "./*": "./dist/*.js"
-  },
+  "exports": "./dist/index.js",
   "files": [
     "dist"
   ],
