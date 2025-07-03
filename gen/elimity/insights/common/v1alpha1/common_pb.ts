@@ -7,56 +7,13 @@ import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialM
 import { Message, proto3, Timestamp } from "@bufbuild/protobuf";
 
 /**
- * @generated from message elimity.insights.common.v1alpha1.AttributeAssignment
- */
-export class AttributeAssignment extends Message<AttributeAssignment> {
-  /**
-   * @generated from field: string attribute_type_id = 1;
-   */
-  attributeTypeId = "";
-
-  /**
-   * @generated from field: elimity.insights.common.v1alpha1.Value value = 2;
-   */
-  value?: Value;
-
-  constructor(data?: PartialMessage<AttributeAssignment>) {
-    super();
-    proto3.util.initPartial(data, this);
-  }
-
-  static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "elimity.insights.common.v1alpha1.AttributeAssignment";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "attribute_type_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "value", kind: "message", T: Value },
-  ]);
-
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): AttributeAssignment {
-    return new AttributeAssignment().fromBinary(bytes, options);
-  }
-
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): AttributeAssignment {
-    return new AttributeAssignment().fromJson(jsonValue, options);
-  }
-
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): AttributeAssignment {
-    return new AttributeAssignment().fromJsonString(jsonString, options);
-  }
-
-  static equals(a: AttributeAssignment | PlainMessage<AttributeAssignment> | undefined, b: AttributeAssignment | PlainMessage<AttributeAssignment> | undefined): boolean {
-    return proto3.util.equals(AttributeAssignment, a, b);
-  }
-}
-
-/**
  * @generated from message elimity.insights.common.v1alpha1.Entity
  */
 export class Entity extends Message<Entity> {
   /**
-   * @generated from field: repeated elimity.insights.common.v1alpha1.AttributeAssignment assignments = 1;
+   * @generated from field: map<string, elimity.insights.common.v1alpha1.Value> attribute_assignments = 1;
    */
-  assignments: AttributeAssignment[] = [];
+  attributeAssignments: { [key: string]: Value } = {};
 
   /**
    * @generated from field: string id = 2;
@@ -81,7 +38,7 @@ export class Entity extends Message<Entity> {
   static readonly runtime: typeof proto3 = proto3;
   static readonly typeName = "elimity.insights.common.v1alpha1.Entity";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "assignments", kind: "message", T: AttributeAssignment, repeated: true },
+    { no: 1, name: "attribute_assignments", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "message", T: Value} },
     { no: 2, name: "id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
@@ -109,9 +66,9 @@ export class Entity extends Message<Entity> {
  */
 export class Relationship extends Message<Relationship> {
   /**
-   * @generated from field: repeated elimity.insights.common.v1alpha1.AttributeAssignment assignments = 1;
+   * @generated from field: map<string, elimity.insights.common.v1alpha1.Value> attribute_assignments = 1;
    */
-  assignments: AttributeAssignment[] = [];
+  attributeAssignments: { [key: string]: Value } = {};
 
   /**
    * @generated from field: string from_entity_id = 2;
@@ -141,7 +98,7 @@ export class Relationship extends Message<Relationship> {
   static readonly runtime: typeof proto3 = proto3;
   static readonly typeName = "elimity.insights.common.v1alpha1.Relationship";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "assignments", kind: "message", T: AttributeAssignment, repeated: true },
+    { no: 1, name: "attribute_assignments", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "message", T: Value} },
     { no: 2, name: "from_entity_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "from_entity_type", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "to_entity_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },

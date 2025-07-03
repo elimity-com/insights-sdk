@@ -2,20 +2,15 @@ syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 
-message AttributeAssignment {
-  string attribute_type_id = 1;
-  Value value = 2;
-}
-
 message Entity {
-  repeated AttributeAssignment assignments = 1;
+  map<string, Value> attribute_assignments = 1;
   string id = 2;
   string name = 3;
   string type = 4;
 }
 
 message Relationship {
-  repeated AttributeAssignment assignments = 1;
+  map<string, Value> attribute_assignments = 1;
   string from_entity_id = 2;
   string from_entity_type = 3;
   string to_entity_id = 4;
