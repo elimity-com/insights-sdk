@@ -79,7 +79,42 @@ type request struct {
 
 ### NodeJS
 
-TODO
+```typescript
+import {
+  Item,
+  ItemKind,
+  Level,
+  Value,
+  serveGateway,
+} from "@elimity/insights-sdk";
+import { JsonValue } from "@bufbuild/protobuf";
+import { readdir } from "node:fs/promises";
+
+async function* generateItems(
+  fields: Record<string, JsonValue>,
+): AsyncGenerator<Item> {
+  const path = fields["path"];
+  if (typeof path != "string") throw new Error("got invalid request");
+  yield {
+    kind: ItemKind.Log,
+    level: Level.Info,
+    message: "Reading directory contents",
+  };
+  const files = await readdir(path);
+  for (const file of files) {
+    const assignments: Record<string, Value> = {};
+    yield {
+      attributeAssignments: assignments,
+      id: file,
+      kind: ItemKind.Entity,
+      name: file,
+      type: "file",
+    };
+  }
+}
+
+serveGateway(generateItems);
+```
 
 ## Installation
 
