@@ -2,20 +2,20 @@ import { ConnectError, ConnectRouter } from "@connectrpc/connect";
 import {
   PerformImportRequest,
   PerformImportResponse,
-  Service,
 } from "./gen/elimity/insights/customgateway/v1alpha1/customgateway_pb.js";
-import { Value } from "@bufbuild/protobuf/wkt";
+import { PlainMessage, Value } from "@bufbuild/protobuf";
+import { Service } from "./gen/elimity/insights/customgateway/v1alpha1/customgateway_connect.js";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { createServer } from "node:http";
 
 export function serveGateway(
   handler: (
     fields: Record<string, Value>,
-  ) => AsyncGenerator<PerformImportResponse>,
+  ) => AsyncGenerator<PlainMessage<PerformImportResponse>>,
 ): void {
   async function* generateResponses(
     request: PerformImportRequest,
-  ): AsyncGenerator<PerformImportResponse> {
+  ): AsyncGenerator<PlainMessage<PerformImportResponse>> {
     try {
       yield* handler(request.fields);
     } catch (error) {
@@ -23,7 +23,7 @@ export function serveGateway(
     }
   }
   const processRouter = (router: ConnectRouter): void => {
-    router.rpc(Service.method.performImport, generateResponses);
+    router.rpc(Service, Service.methods.performImport, generateResponses);
   };
   const options = { routes: processRouter };
   const adapter = connectNodeAdapter(options);
