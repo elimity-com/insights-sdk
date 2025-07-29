@@ -19,12 +19,13 @@ var errorChannel = make(chan error)
 
 var handler func([]byte) iter.Seq2[*v1alpha1.PerformImportResponse, error]
 
-var server = &http.Server{}
+var server *http.Server
 
 var signalChannel = make(chan os.Signal, 1)
 
-func ServeGateway(han func([]byte) iter.Seq2[*v1alpha1.PerformImportResponse, error]) {
+func ServeGateway(address string, han func([]byte) iter.Seq2[*v1alpha1.PerformImportResponse, error]) {
 	handler = han
+	server = &http.Server{Addr: address}
 	go handleSignals()
 	var serviceHandler serviceHandler
 	path, httpHandler := v1alpha1connect.NewServiceHandler(serviceHandler)
