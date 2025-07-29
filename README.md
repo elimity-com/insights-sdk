@@ -5,8 +5,8 @@ Insights servers.
 
 ## Usage
 
-The following snippets shows how to implement a custom gateway that simply logs a message and streams an entity for each
-file in the requested directory.
+The following snippets shows how to implement a custom gateway that first validates a secret token for authentication,
+then logs a message and finally streams an entity for each file in the requested directory.
 
 ### Go
 
@@ -14,19 +14,33 @@ file in the requested directory.
 package main
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	commonv1alpha1 "github.com/elimity-com/insights-sdk/gen/elimity/insights/common/v1alpha1"
 	customgatewayv1alpha1 "github.com/elimity-com/insights-sdk/gen/elimity/insights/customgateway/v1alpha1"
+	"github.com/elimity-com/insights-sdk"
 	"iter"
+	"log"
 	"os"
 )
+
+var con config
 
 func generateResponses(bytes []byte) iter.Seq2[*customgatewayv1alpha1.PerformImportResponse, error] {
 	return responseGenerator{bytes: bytes}.generate
 }
 
 func main() {
+	bytes, err := os.ReadFile("config/config.json")
+	if err != nil {
+		log.Fatalf("failed reading config file: %v", err)
+	}
+	if err := json.Unmarshal(bytes, &con); err != nil {
+		log.Fatalf("failed parsing config file: %v", err)
+	}
 	insightssdk.ServeGateway(":8080", generateResponses)
 }
 
@@ -41,6 +55,12 @@ func (g responseGenerator) generate(yield func(*customgatewayv1alpha1.PerformImp
 		yield(nil, err)
 		return
 	}
+	hash := sha256.Sum256(request.SecretToken)
+	if hash := hash[:]; subtle.ConstantTimeCompare(hash, con.SecretTokenHash) == 0 {
+		err := errors.New("got invalid secret token")
+		yield(nil, err)
+		return
+    }
 	info := &customgatewayv1alpha1.Level_Info{}
 	level := &customgatewayv1alpha1.Level{Value: info}
 	log := &customgatewayv1alpha1.Log{
@@ -60,9 +80,9 @@ func (g responseGenerator) generate(yield func(*customgatewayv1alpha1.PerformImp
 	}
 	for _, file := range files {
 		entity := &commonv1alpha1.Entity{
-			Id:          item.ID,
-			Name:        item.Name,
-			Type:        item.Type,
+			Id:   item.ID,
+			Name: item.Name,
+			Type: item.Type,
 		}
 		ent := &customgatewayv1alpha1.PerformImportResponse_Entity{Entity: entity}
 		response := &customgatewayv1alpha1.PerformImportResponse{Value: ent}
@@ -72,8 +92,13 @@ func (g responseGenerator) generate(yield func(*customgatewayv1alpha1.PerformImp
 	}
 }
 
+type config struct {
+	SecretTokenHash []byte
+}
+
 type request struct {
-	Path string
+	Path        string
+	SecretToken []byte
 }
 ```
 
@@ -88,19 +113,35 @@ import {
   serveGateway,
 } from "@elimity/insights-sdk";
 import { JsonValue } from "@bufbuild/protobuf";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
+import { z } from "zod";
+
+const serializedConfig = readFileSync("config/config.json", "utf8");
+const parsedConfig = JSON.parse(serializedConfig);
+const validatedConfig = z
+  .strictObject({ secretTokenHash: z.base64() })
+  .parse(serializedConfig);
+const expectedHash = Buffer.from(validatedConfig.secretTokenHash, "base64");
 
 async function* generateItems(
   fields: Record<string, JsonValue>,
 ): AsyncGenerator<Item> {
-  const path = fields["path"];
-  if (typeof path != "string") throw new Error("got invalid request");
+  const request = z
+    .strictObject({ path: z.string(), secretToken: z.base64() })
+    .parse(fields);
+  const actualHash = createHash("sha256")
+    .update(request.secretToken, "base64")
+    .digest();
+  const unauthenticated = !timingSafeEqual(actualHash, expectedHash);
+  if (unauthenticated) throw new Error("got invalid secret token");
   yield {
     kind: ItemKind.Log,
     level: Level.Info,
     message: "Reading directory contents",
   };
-  const files = await readdir(path);
+  const files = await readdir(request.path);
   for (const file of files) {
     const assignments: Record<string, Value> = {};
     yield {
@@ -132,6 +173,6 @@ $ npm i @elimity/insights-sdk
 
 ## Compatibility
 
-| Client version | Insights version |
-| -------------- | ---------------- |
-| 1              | >=3.42           |
+| SDK version | Insights version |
+| ----------- | ---------------- |
+| 1           | >=3.42           |
