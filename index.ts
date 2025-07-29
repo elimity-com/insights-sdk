@@ -101,6 +101,7 @@ export enum ValueType {
 
 export function serveGateway(
   handler: (fields: Record<string, JsonValue>) => AsyncGenerator<Item>,
+  port: number,
 ): void {
   async function* generateResponses(
     request: PerformImportRequest,
@@ -122,7 +123,7 @@ export function serveGateway(
   };
   const options = { routes: processRouter };
   const adapter = connectNodeAdapter(options);
-  createServer(adapter).listen(80);
+  createServer(adapter).listen(port);
 }
 
 function makeJsonValue(value: ProtobufValue): JsonValue {

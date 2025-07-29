@@ -27,7 +27,7 @@ func generateResponses(bytes []byte) iter.Seq2[*customgatewayv1alpha1.PerformImp
 }
 
 func main() {
-	insightssdk.ServeGateway(generateResponses)
+	insightssdk.ServeGateway(":8080", generateResponses)
 }
 
 type responseGenerator struct {
@@ -113,7 +113,7 @@ async function* generateItems(
   }
 }
 
-serveGateway(generateItems);
+serveGateway(generateItems, 8080);
 ```
 
 ## Installation
