@@ -5,7 +5,7 @@ Insights servers.
 
 ## Usage
 
-The following snippets shows how to implement a custom gateway that first validates a secret token for authentication,
+The following snippets shows how to implement a custom gateway that first validates Elimity Insights' JWT access token,
 then logs a message and finally streams an entity for each file in the requested directory.
 
 ### Go
@@ -14,34 +14,60 @@ then logs a message and finally streams an entity for each file in the requested
 package main
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"github.com/auth0/go-jwt-middleware/v2"
+	"github.com/auth0/go-jwt-middleware/v2/jwks"
+	"github.com/auth0/go-jwt-middleware/v2/validator"
+	"github.com/elimity-com/insights-sdk"
 	commonv1alpha1 "github.com/elimity-com/insights-sdk/gen/elimity/insights/common/v1alpha1"
 	customgatewayv1alpha1 "github.com/elimity-com/insights-sdk/gen/elimity/insights/customgateway/v1alpha1"
-	"github.com/elimity-com/insights-sdk"
 	"iter"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 )
-
-var con config
 
 func generateResponses(bytes []byte) iter.Seq2[*customgatewayv1alpha1.PerformImportResponse, error] {
 	return responseGenerator{bytes: bytes}.generate
 }
 
+func makeClaims() validator.CustomClaims {
+	return &claims{}
+}
+
 func main() {
-	bytes, err := os.ReadFile("config/config.json")
-	if err != nil {
-		log.Fatalf("failed reading config file: %v", err)
+	url, _ := url.Parse("https://auth.elimity.com/")
+	provider := jwks.NewCachingProvider(url, 0)
+	audiences := []string{"gateway"}
+	option := validator.WithCustomClaims(makeClaims)
+	validator, _ := validator.New(provider.KeyFunc, "RS256", "https://auth.elimity.com/", audiences, option)
+	innerHandler := insightssdk.Handler(generateResponses)
+	outerHandler := jwtmiddleware.New(validator.ValidateToken).CheckJWT(innerHandler)
+	err := http.ListenAndServe(":8080", outerHandler)
+	log.Fatal(err)
+}
+
+type claims struct {
+	BaseURL    string `json:"base_url"`
+	GatewayURL string `json:"gateway_url"`
+	SourceID   string `json:"source_id"`
+}
+
+func (c *claims) Validate(context.Context) error {
+	comparisons := map[string]string{
+		"https://example.elimity.com": c.BaseURL,
+		"https://gateway.example.com": c.GatewayURL,
+		"42":                          c.SourceID,
 	}
-	if err := json.Unmarshal(bytes, &con); err != nil {
-		log.Fatalf("failed parsing config file: %v", err)
+	for expected, actual := range comparisons {
+		if expected != actual {
+			return fmt.Errorf("got invalid claim value: %v", actual)
+		}
 	}
-	insightssdk.ServeGateway(":8080", generateResponses)
+	return nil
 }
 
 type responseGenerator struct {
@@ -55,12 +81,6 @@ func (g responseGenerator) generate(yield func(*customgatewayv1alpha1.PerformImp
 		yield(nil, err)
 		return
 	}
-	hash := sha256.Sum256(request.SecretToken)
-	if hash := hash[:]; subtle.ConstantTimeCompare(hash, con.SecretTokenHash) == 0 {
-		err := errors.New("got invalid secret token")
-		yield(nil, err)
-		return
-    }
 	info := &customgatewayv1alpha1.Level_Info{}
 	level := &customgatewayv1alpha1.Level{Value: info}
 	log := &customgatewayv1alpha1.Log{
@@ -72,17 +92,18 @@ func (g responseGenerator) generate(yield func(*customgatewayv1alpha1.PerformImp
 	if !yield(response, nil) {
 		return
 	}
-	files, err := os.ReadDir(request.Path)
+	entries, err := os.ReadDir(request.Path)
 	if err != nil {
 		err := fmt.Errorf("failed reading directory: %v", err)
 		yield(nil, err)
 		return
 	}
-	for _, file := range files {
+	for _, entry := range entries {
+		name := entry.Name()
 		entity := &commonv1alpha1.Entity{
-			Id:   item.ID,
-			Name: item.Name,
-			Type: item.Type,
+			Id:   name,
+			Name: name,
+			Type: "file",
 		}
 		ent := &customgatewayv1alpha1.PerformImportResponse_Entity{Entity: entity}
 		response := &customgatewayv1alpha1.PerformImportResponse{Value: ent}
@@ -92,50 +113,25 @@ func (g responseGenerator) generate(yield func(*customgatewayv1alpha1.PerformImp
 	}
 }
 
-type config struct {
-	SecretTokenHash []byte
-}
-
 type request struct {
-	Path        string
-	SecretToken []byte
+	Path string
 }
 ```
 
 ### NodeJS
 
 ```typescript
-import {
-  Item,
-  ItemKind,
-  Level,
-  Value,
-  serveGateway,
-} from "@elimity/insights-sdk";
+import { Item, ItemKind, Level, Value, handler } from "@elimity/insights-sdk";
 import { JsonValue } from "@bufbuild/protobuf";
-import { createHash, timingSafeEqual } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { auth } from "express-oauth2-jwt-bearer";
+import express from "express";
 import { readdir } from "node:fs/promises";
 import { z } from "zod";
-
-const serializedConfig = readFileSync("config/config.json", "utf8");
-const parsedConfig = JSON.parse(serializedConfig);
-const validatedConfig = z
-  .strictObject({ secretTokenHash: z.base64() })
-  .parse(serializedConfig);
-const expectedHash = Buffer.from(validatedConfig.secretTokenHash, "base64");
 
 async function* generateItems(
   fields: Record<string, JsonValue>,
 ): AsyncGenerator<Item> {
-  const request = z
-    .strictObject({ path: z.string(), secretToken: z.base64() })
-    .parse(fields);
-  const actualHash = createHash("sha256")
-    .update(request.secretToken, "base64")
-    .digest();
-  const unauthenticated = !timingSafeEqual(actualHash, expectedHash);
-  if (unauthenticated) throw new Error("got invalid secret token");
+  const request = z.strictObject({ path: z.string() }).parse(fields);
   yield {
     kind: ItemKind.Log,
     level: Level.Info,
@@ -154,7 +150,19 @@ async function* generateItems(
   }
 }
 
-serveGateway(generateItems, 8080);
+const validators = {
+  base_url: "https://example.elimity.com",
+  gateway_url: "https://gateway.example.com",
+  source_id: "42",
+};
+const config = {
+  audience: "gateway",
+  issuerBaseURL: "https://auth.elimity.com/",
+  validators,
+};
+const authHandler = auth(config);
+const sdkHandler = handler(generateItems);
+express().use(authHandler, sdkHandler).listen(8080);
 ```
 
 ## Installation
