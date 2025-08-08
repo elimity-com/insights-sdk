@@ -9,42 +9,21 @@ import (
 	"github.com/elimity-com/insights-sdk/gen/elimity/insights/customgateway/v1alpha1/v1alpha1connect"
 	"google.golang.org/protobuf/types/known/structpb"
 	"iter"
-	"log"
 	"maps"
 	"net/http"
-	"os"
 )
 
-var errorChannel = make(chan error)
-
-var handler func([]byte) iter.Seq2[*v1alpha1.PerformImportResponse, error]
-
-var server *http.Server
-
-var signalChannel = make(chan os.Signal, 1)
-
-func ServeGateway(address string, han func([]byte) iter.Seq2[*v1alpha1.PerformImportResponse, error]) {
-	handler = han
-	server = &http.Server{Addr: address}
-	go handleSignals()
-	var serviceHandler serviceHandler
+func Handler(fun func([]byte) iter.Seq2[*v1alpha1.PerformImportResponse, error]) http.Handler {
+	mux := http.NewServeMux()
+	serviceHandler := serviceHandler{fun: fun}
 	path, httpHandler := v1alpha1connect.NewServiceHandler(serviceHandler)
-	http.Handle(path, httpHandler)
-	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("failed serving: %v", err)
-	}
-	if err := <-errorChannel; err != nil {
-		log.Fatalf("failed shutting down server: %v", err)
-	}
+	mux.Handle(path, httpHandler)
+	return mux
 }
 
-func handleSignals() {
-	<-signalChannel
-	context := context.Background()
-	errorChannel <- server.Shutdown(context)
+type serviceHandler struct {
+	fun func([]byte) iter.Seq2[*v1alpha1.PerformImportResponse, error]
 }
-
-type serviceHandler struct{}
 
 func (h serviceHandler) PerformImport(
 	_ context.Context, request *connect.Request[v1alpha1.PerformImportRequest],
@@ -53,7 +32,7 @@ func (h serviceHandler) PerformImport(
 	fields := map[string]*structpb.Value{}
 	maps.Copy(fields, request.Msg.Fields)
 	bytes, _ := json.Marshal(fields)
-	for response, err := range handler(bytes) {
+	for response, err := range h.fun(bytes) {
 		if err != nil {
 			return fmt.Errorf("handler failed: %v", err)
 		}
