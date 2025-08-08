@@ -11,9 +11,9 @@ import {
   Timestamp,
 } from "@bufbuild/protobuf";
 import { Value as CommonValue } from "./gen/elimity/insights/common/v1alpha1/common_pb.js";
+import { Handler } from "express";
 import { Service } from "./gen/elimity/insights/customgateway/v1alpha1/customgateway_connect.js";
-import { connectNodeAdapter } from "@connectrpc/connect-node";
-import { createServer } from "node:http";
+import { expressConnectMiddleware } from "@connectrpc/connect-express";
 import { mapValues } from "lodash";
 
 export interface BooleanValue {
@@ -99,15 +99,14 @@ export enum ValueType {
   Time,
 }
 
-export function serveGateway(
-  handler: (fields: Record<string, JsonValue>) => AsyncGenerator<Item>,
-  port: number,
-): void {
+export function handler(
+  fun: (fields: Record<string, JsonValue>) => AsyncGenerator<Item>,
+): Handler {
   async function* generateResponses(
     request: PerformImportRequest,
   ): AsyncGenerator<PlainMessage<PerformImportResponse>> {
     const fields = mapValues(request.fields, makeJsonValue);
-    const generator = handler(fields);
+    const generator = fun(fields);
     try {
       for await (const item of generator) {
         const value = makeResponseValue(item);
@@ -122,8 +121,7 @@ export function serveGateway(
     router.rpc(Service, Service.methods.performImport, generateResponses);
   };
   const options = { routes: processRouter };
-  const adapter = connectNodeAdapter(options);
-  createServer(adapter).listen(port);
+  return expressConnectMiddleware(options);
 }
 
 function makeJsonValue(value: ProtobufValue): JsonValue {
