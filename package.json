@@ -15,7 +15,10 @@
     "@connectrpc/connect-express": "^1.6.1",
     "lodash": "^4.17.21"
   },
-  "exports": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./*": "./dist/*.js"
+  },
   "files": [
     "dist"
   ],
