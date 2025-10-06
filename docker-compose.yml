@@ -1,7 +1,7 @@
 services:
   dev:
     entrypoint: sleep infinity
-    image: ghcr.io/elimity-com/insights-sdk:14245239418
+    image: ghcr.io/elimity-com/insights-sdk:18279107697
     init: true
     volumes:
       - .:/app
