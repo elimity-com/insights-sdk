@@ -1,30 +1,46 @@
 jobs:
   arrange:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - run: test -z "$(goarrange run -d)"
 
-  buf-generate:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+  black:
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - run: npm ci
-      - run: npx buf generate
+      - run: poetry install
+      - run: poetry run black --check src
+
+  buf-generate:
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: buf generate
+      - run: poetry install
+      - run: poetry run protol -o gen/elimity --create-package --in-place buf
+      - run: touch gen/elimity/py.typed
       - run: git -c safe.directory=/__w/insights-sdk/insights-sdk diff --quiet
 
   buf-lint:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - run: npm ci
-      - run: npx buf lint
+      - run: buf lint
+
+  check:
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: poetry check --lock
 
   eslint:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -32,14 +48,30 @@ jobs:
       - run: npx eslint .
 
   golangci-lint:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - run: GOFLAGS='-buildvcs=false' golangci-lint run
 
+  isort:
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: poetry install
+      - run: poetry run isort -c src
+
+  mypy:
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: poetry install
+      - run: poetry run mypy src
+
   prettier:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -47,21 +79,21 @@ jobs:
       - run: npx prettier -c .
 
   test:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - run: go test -v ./...
 
   tidy:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - run: go mod tidy -diff
 
   tsc:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4

@@ -16,4 +16,13 @@ plugins:
     out: gen
     remote: buf.build/connectrpc/es:v1.6.1
     revision: 1
+  - out: gen
+    remote: buf.build/connectrpc/python:v0.5.0
+    revision: 1
+  - out: gen
+    remote: buf.build/protocolbuffers/pyi:v29.5
+    revision: 1
+  - out: gen
+    remote: buf.build/protocolbuffers/python:v29.5
+    revision: 1
 version: v2

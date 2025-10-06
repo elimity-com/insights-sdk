@@ -1,7 +1,7 @@
 # Elimity Insights SDK
 
-This repository contains a Go and NodeJS package to simplify the implementation of various interactions with Elimity
-Insights servers.
+This repository contains a Go, NodeJS and Python package to simplify the implementation of various interactions with
+Elimity Insights servers.
 
 ## Usage
 
@@ -165,6 +165,58 @@ const sdkHandler = handler(generateItems);
 express().use(authHandler, sdkHandler).listen(8080);
 ```
 
+### Python
+
+```python
+from collections.abc import AsyncIterator
+from os import listdir
+from typing import Literal
+
+from auth0_api_python import ApiClient, ApiClientOptions
+from elimity_insights_sdk import EntityItem, Item, Level, LogItem, Value, app
+from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
+from starlette.responses import Response
+from uvicorn import run
+
+_options = ApiClientOptions("auth.elimity.com", "gateway")
+_client = ApiClient(_options)
+
+
+class _Claims(BaseModel):
+    base_url: Literal["https://example.elimity.com"]
+    gateway_url: Literal["https://gateway.example.com"]
+    source_id: Literal["42"]
+
+
+class _Middleware(BaseHTTPMiddleware):
+    async def dispatch(
+            self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        headers = dict(request.headers)
+        claims = await _client.verify_request(headers)
+        _Claims.model_validate(claims)
+        return await call_next(request)
+
+
+class _Request(BaseModel):
+    path: str
+
+
+async def _generate_items(fields: dict[str, object]) -> AsyncIterator[Item]:
+    request = _Request.model_validate(fields)
+    yield LogItem(Level.INFO, "Reading directory contents")
+    for file in listdir(request.path):
+        assignments: dict[str, Value] = {}
+        yield EntityItem(assignments, file, file, "file")
+
+
+_app = app(_generate_items)
+_middleware = _Middleware(_app)
+run(_middleware)
+```
+
 ## Installation
 
 ### Go
@@ -177,6 +229,12 @@ $ go get github.com/elimity-com/insights-sdk
 
 ```sh
 $ npm i @elimity/insights-sdk
+```
+
+### Python
+
+```
+$ pip install elimity-insights-sdk
 ```
 
 ## Compatibility

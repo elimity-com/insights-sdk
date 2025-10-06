@@ -1,6 +1,6 @@
 jobs:
   job:
-    container: ghcr.io/elimity-com/insights-sdk:14245239418
+    container: ghcr.io/elimity-com/insights-sdk:18279107697
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -8,6 +8,8 @@ jobs:
       - run: npm version --no-git-tag-version ${{ github.event.release.tag_name }}
       - run: npx tsc
       - run: env NPM_CONFIG_//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }} npm publish --access public
+      - run: poetry version $(poetry version -s --dry-run ${{ github.event.release.tag_name }})
+      - run: POETRY_PYPI_TOKEN_PYPI=${{ secrets.PYPI_TOKEN }} poetry publish --build
 
 on:
   release:
