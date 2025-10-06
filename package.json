@@ -1,6 +1,5 @@
 {
   "devDependencies": {
-    "@bufbuild/buf": "^1.51.0",
     "@types/express": "^5.0.3",
     "@types/lodash": "^4.17.20",
     "@types/node": "^22.15.33",
