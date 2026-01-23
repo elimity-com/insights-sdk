@@ -3,16 +3,16 @@ import {
   Level as GatewayLevel,
   PerformImportRequest,
   PerformImportResponse,
+  Service,
 } from "./gen/elimity/insights/customgateway/v1alpha1/customgateway_pb.js";
+import { JsonValue, toJson } from "@bufbuild/protobuf";
 import {
-  JsonValue,
-  PlainMessage,
   Value as ProtobufValue,
-  Timestamp,
-} from "@bufbuild/protobuf";
+  ValueSchema,
+  timestampFromDate,
+} from "@bufbuild/protobuf/wkt";
 import { Value as CommonValue } from "./gen/elimity/insights/common/v1alpha1/common_pb.js";
 import { Handler } from "express";
-import { Service } from "./gen/elimity/insights/customgateway/v1alpha1/customgateway_connect.js";
 import { expressConnectMiddleware } from "@connectrpc/connect-express";
 import { mapValues } from "lodash";
 
@@ -104,13 +104,17 @@ export function handler(
 ): Handler {
   async function* generateResponses(
     request: PerformImportRequest,
-  ): AsyncGenerator<PlainMessage<PerformImportResponse>> {
+  ): AsyncGenerator<PerformImportResponse> {
     const fields = mapValues(request.fields, makeJsonValue);
     const generator = fun(fields);
     try {
       for await (const item of generator) {
         const value = makeResponseValue(item);
-        yield { value };
+        yield {
+          $typeName:
+            "elimity.insights.customgateway.v1alpha1.PerformImportResponse",
+          value,
+        };
       }
     } catch (error) {
       throw ConnectError.from(error);
@@ -118,30 +122,31 @@ export function handler(
   }
 
   const processRouter = (router: ConnectRouter): void => {
-    router.rpc(Service, Service.methods.performImport, generateResponses);
+    router.rpc(Service.method.performImport, generateResponses);
   };
   const options = { routes: processRouter };
   return expressConnectMiddleware(options);
 }
 
 function makeJsonValue(value: ProtobufValue): JsonValue {
-  return value.toJson();
+  return toJson(ValueSchema, value);
 }
 
 function makeAttributeAssignments(
   assignments: Record<string, Value>,
-): Record<string, PlainMessage<CommonValue>> {
+): Record<string, CommonValue> {
   return mapValues(assignments, makeCommonValue);
 }
 
-function makeCommonValue(value: Value): PlainMessage<CommonValue> {
+function makeCommonValue(value: Value): CommonValue {
   const val = makeCommonValueValue(value);
-  return { value: val };
+  return {
+    $typeName: "elimity.insights.common.v1alpha1.Value",
+    value: val,
+  };
 }
 
-function makeCommonValueValue(
-  value: Value,
-): PlainMessage<CommonValue>["value"] {
+function makeCommonValueValue(value: Value): CommonValue["value"] {
   switch (value.type) {
     case ValueType.Boolean:
       return {
@@ -150,7 +155,7 @@ function makeCommonValueValue(
       };
 
     case ValueType.Date: {
-      const timestamp = Timestamp.fromDate(value.value);
+      const timestamp = timestampFromDate(value.value);
       return {
         case: "date",
         value: timestamp,
@@ -158,7 +163,7 @@ function makeCommonValueValue(
     }
 
     case ValueType.DateTime: {
-      const timestamp = Timestamp.fromDate(value.value);
+      const timestamp = timestampFromDate(value.value);
       return {
         case: "dateTime",
         value: timestamp,
@@ -178,7 +183,7 @@ function makeCommonValueValue(
       };
 
     case ValueType.Time: {
-      const timestamp = Timestamp.fromDate(value.value);
+      const timestamp = timestampFromDate(value.value);
       return {
         case: "time",
         value: timestamp,
@@ -187,18 +192,17 @@ function makeCommonValueValue(
   }
 }
 
-function makeResponseValue(
-  item: Item,
-): PlainMessage<PerformImportResponse>["value"] {
+function makeResponseValue(item: Item): PerformImportResponse["value"] {
   switch (item.kind) {
     case ItemKind.Entity: {
       const assignments = makeAttributeAssignments(item.attributeAssignments);
       const entity = {
+        $typeName: "elimity.insights.common.v1alpha1.Entity",
         attributeAssignments: assignments,
         id: item.id,
         name: item.name,
         type: item.type,
-      };
+      } as const;
       return {
         case: "entity",
         value: entity,
@@ -206,8 +210,8 @@ function makeResponseValue(
     }
 
     case ItemKind.Log: {
-      const empty = {};
-      const value: PlainMessage<GatewayLevel>["value"] =
+      const empty = { $typeName: "google.protobuf.Empty" } as const;
+      const value: GatewayLevel["value"] =
         item.level == Level.Alert
           ? {
               case: "alert",
@@ -217,11 +221,15 @@ function makeResponseValue(
               case: "info",
               value: empty,
             };
-      const level = { value };
+      const level = {
+        $typeName: "elimity.insights.customgateway.v1alpha1.Level",
+        value,
+      } as const;
       const log = {
+        $typeName: "elimity.insights.customgateway.v1alpha1.Log",
         level,
         message: item.message,
-      };
+      } as const;
       return {
         case: "log",
         value: log,
@@ -231,12 +239,13 @@ function makeResponseValue(
     case ItemKind.Relationship: {
       const assignments = makeAttributeAssignments(item.attributeAssignments);
       const relationship = {
+        $typeName: "elimity.insights.common.v1alpha1.Relationship",
         attributeAssignments: assignments,
         fromEntityId: item.fromEntityId,
         fromEntityType: item.fromEntityType,
         toEntityId: item.toEntityId,
         toEntityType: item.toEntityType,
-      };
+      } as const;
       return {
         case: "relationship",
         value: relationship,
