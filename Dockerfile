@@ -1,9 +1,8 @@
 FROM node:lts-trixie
-ARG TARGETARCH
-ENV PATH=$PATH:/root/.local/bin:/root/go/bin:/usr/local/go/bin
+ENV PATH=$PATH:/root/.local/bin:/root/go/bin
 RUN \
-    curl -L https://go.dev/dl/go1.24.1.linux-$TARGETARCH.tar.gz | tar -C /usr/local -xz && \
+    apt-get update && apt-get install -y golang && \
+    curl https://golangci-lint.run/install.sh | sh && \
     curl https://install.python-poetry.org | python3 && \
-    curl https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh && \
     go install github.com/bufbuild/buf/cmd/buf@latest && \
     go install github.com/jdeflander/goarrange@latest
