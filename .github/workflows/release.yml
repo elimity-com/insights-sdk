@@ -1,6 +1,6 @@
 jobs:
   job:
-    container: ghcr.io/elimity-com/insights-sdk:18279107697
+    container: ghcr.io/elimity-com/insights-sdk:26232804008
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
