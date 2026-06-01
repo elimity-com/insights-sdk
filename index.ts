@@ -1,11 +1,12 @@
 import { ConnectError, ConnectRouter } from "@connectrpc/connect";
 import {
   Level as GatewayLevel,
+  MetaResponse,
   PerformImportRequest,
   PerformImportResponse,
   Service,
-} from "./gen/elimity/insights/customgateway/v1alpha1/customgateway_pb.js";
-import { JsonValue, toJson } from "@bufbuild/protobuf";
+} from "./gen/elimity/insights/customgateway/v1alpha2/customgateway_pb.js";
+import { JsonValue, fromJson, toJson } from "@bufbuild/protobuf";
 import {
   Value as ProtobufValue,
   ValueSchema,
@@ -19,6 +20,11 @@ import { mapValues } from "lodash";
 export interface BooleanValue {
   readonly type: ValueType.Boolean;
   readonly value: boolean;
+}
+
+export interface CursorItem {
+  readonly cursor: JsonValue;
+  readonly kind: ItemKind.Cursor;
 }
 
 export interface DateValue {
@@ -39,9 +45,10 @@ export interface EntityItem {
   readonly type: string;
 }
 
-export type Item = EntityItem | LogItem | RelationshipItem;
+export type Item = CursorItem | EntityItem | LogItem | RelationshipItem;
 
 export enum ItemKind {
+  Cursor,
   Entity,
   Log,
   Relationship,
@@ -100,19 +107,40 @@ export enum ValueType {
 }
 
 export function handler(
-  fun: (fields: Record<string, JsonValue>) => AsyncGenerator<Item>,
+  fun: (
+    cursor: JsonValue,
+    fields: Record<string, JsonValue>,
+  ) => AsyncGenerator<Item>,
+  initialCursor: JsonValue,
+  version: string,
 ): Handler {
+  function makeMetaResponse(): MetaResponse {
+    const cursor = makeProtobufValue(initialCursor);
+    return {
+      $typeName: "elimity.insights.customgateway.v1alpha2.MetaResponse",
+      initialCursor: cursor,
+      version,
+    };
+  }
+
   async function* generateResponses(
     request: PerformImportRequest,
   ): AsyncGenerator<PerformImportResponse> {
+    const actualVersion = request.version;
+    if (version != actualVersion) {
+      const message = `expected request to have version ${version} instead of ${actualVersion}`;
+      throw new ConnectError(message);
+    }
+    const cursor = request.cursor;
+    const cur = cursor == undefined ? null : makeJsonValue(cursor);
     const fields = mapValues(request.fields, makeJsonValue);
-    const generator = fun(fields);
+    const generator = fun(cur, fields);
     try {
       for await (const item of generator) {
         const value = makeResponseValue(item);
         yield {
           $typeName:
-            "elimity.insights.customgateway.v1alpha1.PerformImportResponse",
+            "elimity.insights.customgateway.v1alpha2.PerformImportResponse",
           value,
         };
       }
@@ -122,6 +150,7 @@ export function handler(
   }
 
   const processRouter = (router: ConnectRouter): void => {
+    router.rpc(Service.method.meta, makeMetaResponse);
     router.rpc(Service.method.performImport, generateResponses);
   };
   const options = { routes: processRouter };
@@ -192,8 +221,20 @@ function makeCommonValueValue(value: Value): CommonValue["value"] {
   }
 }
 
+function makeProtobufValue(value: JsonValue): ProtobufValue {
+  return fromJson(ValueSchema, value);
+}
+
 function makeResponseValue(item: Item): PerformImportResponse["value"] {
   switch (item.kind) {
+    case ItemKind.Cursor: {
+      const value = makeProtobufValue(item.cursor);
+      return {
+        case: "cursor",
+        value,
+      };
+    }
+
     case ItemKind.Entity: {
       const assignments = makeAttributeAssignments(item.attributeAssignments);
       const entity = {
@@ -222,11 +263,11 @@ function makeResponseValue(item: Item): PerformImportResponse["value"] {
               value: empty,
             };
       const level = {
-        $typeName: "elimity.insights.customgateway.v1alpha1.Level",
+        $typeName: "elimity.insights.customgateway.v1alpha2.Level",
         value,
       } as const;
       const log = {
-        $typeName: "elimity.insights.customgateway.v1alpha1.Log",
+        $typeName: "elimity.insights.customgateway.v1alpha2.Log",
         level,
         message: item.message,
       } as const;

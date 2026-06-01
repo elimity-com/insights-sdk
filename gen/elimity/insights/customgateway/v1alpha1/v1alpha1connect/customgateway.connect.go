@@ -8,7 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1alpha1 "github.com/elimity-com/insights-sdk/gen/elimity/insights/customgateway/v1alpha1"
+	v1alpha1 "github.com/elimity-com/insights-sdk/v2/gen/elimity/insights/customgateway/v1alpha1"
 	http "net/http"
 	strings "strings"
 )

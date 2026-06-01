@@ -28,6 +28,6 @@ message Value {
   }
 }
 
-option go_package = "github.com/elimity-com/insights-sdk/gen/elimity/insights/common/v1alpha1";
+option go_package = "github.com/elimity-com/insights-sdk/v2/gen/elimity/insights/common/v1alpha1";
 
 package elimity.insights.common.v1alpha1;
