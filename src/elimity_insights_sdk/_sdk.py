@@ -7,19 +7,22 @@ from typing import Union
 from connectrpc.request import RequestContext
 from elimity.insights.common.v1alpha1.common_pb2 import Entity, Relationship
 from elimity.insights.common.v1alpha1.common_pb2 import Value as CommonValue
-from elimity.insights.customgateway.v1alpha1.customgateway_connect import (
+from elimity.insights.customgateway.v1alpha2.customgateway_connect import (
     ServiceASGIApplication,
 )
-from elimity.insights.customgateway.v1alpha1.customgateway_pb2 import (
+from elimity.insights.customgateway.v1alpha2.customgateway_pb2 import (
     Level as GatewayLevel,
 )
-from elimity.insights.customgateway.v1alpha1.customgateway_pb2 import (
+from elimity.insights.customgateway.v1alpha2.customgateway_pb2 import (
     Log,
+    MetaRequest,
+    MetaResponse,
     PerformImportRequest,
     PerformImportResponse,
 )
 from google.protobuf.empty_pb2 import Empty
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.struct_pb2 import Value as StructValue
 from google.protobuf.timestamp_pb2 import Timestamp
 
 
@@ -90,23 +93,45 @@ Value = Union[
 
 
 def app(
-    fun: Callable[[dict[str, object]], AsyncIterator[Item]],
+    fun: Callable[[object, dict[str, object]], AsyncIterator[Item]],
+    initial_cursor: object,
+    version: str,
 ) -> ServiceASGIApplication:
-    service = _Service(fun)
+    service = _Service(fun, initial_cursor, version)
     return ServiceASGIApplication(service)
 
 
 class _Service:
-    def __init__(self, fun: Callable[[dict[str, object]], AsyncIterator[Item]]):
+    def __init__(
+        self,
+        fun: Callable[[object, dict[str, object]], AsyncIterator[Item]],
+        initial_cursor: object,
+        version: str,
+    ):
         self._fun = fun
+        self._initial_cursor = initial_cursor
+        self._version = version
+
+    async def meta(
+        self, request: MetaRequest, ctx: RequestContext[object, object]
+    ) -> MetaResponse:
+        value = StructValue()
+        ParseDict(self._initial_cursor, value)
+        return MetaResponse(initial_cursor=value, version=self._version)
 
     def perform_import(
         self, req: PerformImportRequest, ctx: RequestContext[object, object]
     ) -> AsyncIterator[PerformImportResponse]:
+        expected_version = self._version
+        actual_version = req.version
+        if expected_version != actual_version:
+            message = f"expected request to have version {expected_version} instead of {actual_version}"
+            raise BaseException(message)
+        cursor = MessageToDict(req.cursor)
         fields: dict[str, object] = {}
         for key, value in req.fields.items():
             fields[key] = MessageToDict(value)
-        items = self._fun(fields)
+        items = self._fun(cursor, fields)
         return _generate_responses(items)
 
 

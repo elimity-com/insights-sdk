@@ -20,9 +20,9 @@ import (
 	"github.com/auth0/go-jwt-middleware/v2"
 	"github.com/auth0/go-jwt-middleware/v2/jwks"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
-	"github.com/elimity-com/insights-sdk"
-	commonv1alpha1 "github.com/elimity-com/insights-sdk/gen/elimity/insights/common/v1alpha1"
-	customgatewayv1alpha1 "github.com/elimity-com/insights-sdk/gen/elimity/insights/customgateway/v1alpha1"
+	"github.com/elimity-com/insights-sdk/v2"
+	"github.com/elimity-com/insights-sdk/v2/gen/elimity/insights/common/v1alpha1"
+	"github.com/elimity-com/insights-sdk/v2/gen/elimity/insights/customgateway/v1alpha2"
 	"iter"
 	"log"
 	"net/http"
@@ -30,8 +30,12 @@ import (
 	"os"
 )
 
-func generateResponses(bytes []byte) iter.Seq2[*customgatewayv1alpha1.PerformImportResponse, error] {
-	return responseGenerator{bytes: bytes}.generate
+func generateResponses(bytes []byte, cursor any) iter.Seq2[*v1alpha2.PerformImportResponse, error] {
+	generator := responseGenerator{
+		bytes:  bytes,
+		cursor: cursor,
+    }
+	return generator.generate
 }
 
 func makeClaims() validator.CustomClaims {
@@ -44,7 +48,7 @@ func main() {
 	audiences := []string{"gateway"}
 	option := validator.WithCustomClaims(makeClaims)
 	validator, _ := validator.New(provider.KeyFunc, "RS256", "https://auth.elimity.com/", audiences, option)
-	innerHandler := insightssdk.Handler(generateResponses)
+	innerHandler := insightssdk.Handler(generateResponses, nil, "v1.0.0")
 	outerHandler := jwtmiddleware.New(validator.ValidateToken).CheckJWT(innerHandler)
 	err := http.ListenAndServe(":8080", outerHandler)
 	log.Fatal(err)
@@ -71,24 +75,25 @@ func (c *claims) Validate(context.Context) error {
 }
 
 type responseGenerator struct {
-	bytes []byte
+	bytes  []byte
+	cursor any
 }
 
-func (g responseGenerator) generate(yield func(*customgatewayv1alpha1.PerformImportResponse, error) bool) {
+func (g responseGenerator) generate(yield func(*v1alpha2.PerformImportResponse, error) bool) {
 	var request request
 	if err := json.Unmarshal(g.bytes, &request); err != nil {
 		err := fmt.Errorf("failed unmarshalling request: %v", err)
 		yield(nil, err)
 		return
 	}
-	info := &customgatewayv1alpha1.Level_Info{}
-	level := &customgatewayv1alpha1.Level{Value: info}
-	log := &customgatewayv1alpha1.Log{
+	info := &v1alpha2.Level_Info{}
+	level := &v1alpha2.Level{Value: info}
+	log := &v1alpha2.Log{
 		Level:   level,
 		Message: "Reading directory contents",
 	}
-	lo := &customgatewayv1alpha1.PerformImportResponse_Log{Log: log}
-	response := &customgatewayv1alpha1.PerformImportResponse{Value: lo}
+	lo := &v1alpha2.PerformImportResponse_Log{Log: log}
+	response := &v1alpha2.PerformImportResponse{Value: lo}
 	if !yield(response, nil) {
 		return
 	}
@@ -100,13 +105,13 @@ func (g responseGenerator) generate(yield func(*customgatewayv1alpha1.PerformImp
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		entity := &commonv1alpha1.Entity{
+		entity := &v1alpha1.Entity{
 			Id:   name,
 			Name: name,
 			Type: "file",
 		}
-		ent := &customgatewayv1alpha1.PerformImportResponse_Entity{Entity: entity}
-		response := &customgatewayv1alpha1.PerformImportResponse{Value: ent}
+		ent := &v1alpha2.PerformImportResponse_Entity{Entity: entity}
+		response := &v1alpha2.PerformImportResponse{Value: ent}
 		if !yield(response, nil) {
 			return
 		}
@@ -129,6 +134,7 @@ import { readdir } from "node:fs/promises";
 import { z } from "zod";
 
 async function* generateItems(
+  cursor: JsonValue,
   fields: Record<string, JsonValue>,
 ): AsyncGenerator<Item> {
   const request = z.strictObject({ path: z.string() }).parse(fields);
@@ -161,7 +167,7 @@ const config = {
   validators,
 };
 const authHandler = auth(config);
-const sdkHandler = handler(generateItems);
+const sdkHandler = handler(generateItems, null, "v1.0.0");
 express().use(authHandler, sdkHandler).listen(8080);
 ```
 
@@ -204,7 +210,7 @@ class _Request(BaseModel):
     path: str
 
 
-async def _generate_items(fields: dict[str, object]) -> AsyncIterator[Item]:
+async def _generate_items(cursor: object, fields: dict[str, object]) -> AsyncIterator[Item]:
     request = _Request.model_validate(fields)
     yield LogItem(Level.INFO, "Reading directory contents")
     for file in listdir(request.path):
@@ -212,7 +218,7 @@ async def _generate_items(fields: dict[str, object]) -> AsyncIterator[Item]:
         yield EntityItem(assignments, file, file, "file")
 
 
-_app = app(_generate_items)
+_app = app(_generate_items, None, "v1.0.0")
 _middleware = _Middleware(_app)
 run(_middleware)
 ```
@@ -222,7 +228,7 @@ run(_middleware)
 ### Go
 
 ```sh
-$ go get github.com/elimity-com/insights-sdk
+$ go get github.com/elimity-com/insights-sdk/v2
 ```
 
 ### NodeJS
@@ -242,3 +248,4 @@ $ pip install elimity-insights-sdk
 | SDK version | Insights version |
 | ----------- | ---------------- |
 | 1           | >=3.42           |
+| 2           | >=3.46           |

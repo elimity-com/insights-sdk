@@ -37,7 +37,7 @@ message Target {
   int64 source_id = 2;
 }
 
-option go_package = "github.com/elimity-com/insights-sdk/gen/elimity/insights/export/v1alpha1";
+option go_package = "github.com/elimity-com/insights-sdk/v2/gen/elimity/insights/export/v1alpha1";
 
 package elimity.insights.export.v1alpha1;
 

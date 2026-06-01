@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+import "elimity/insights/common/v1alpha1/common.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+
+message Level {
+  oneof value {
+    google.protobuf.Empty alert = 1;
+    google.protobuf.Empty info = 2;
+  }
+}
+
+message Log {
+  Level level = 1;
+  string message = 2;
+}
+
+message MetaRequest {}
+
+message MetaResponse {
+  google.protobuf.Value initial_cursor = 1;
+  string version = 2;
+}
+
+message PerformImportRequest {
+  google.protobuf.Value cursor = 1;
+  map<string, google.protobuf.Value> fields = 2;
+  string version = 3;
+}
+
+message PerformImportResponse {
+  oneof value {
+    google.protobuf.Value cursor = 1;
+    common.v1alpha1.Entity entity = 2;
+    Log log = 3;
+    common.v1alpha1.Relationship relationship = 4;
+  }
+}
+
+option go_package = "github.com/elimity-com/insights-sdk/v2/gen/elimity/insights/customgateway/v1alpha2";
+
+package elimity.insights.customgateway.v1alpha2;
+
+service Service {
+  rpc Meta(MetaRequest) returns (MetaResponse);
+  rpc PerformImport(PerformImportRequest) returns (stream PerformImportResponse);
+}
