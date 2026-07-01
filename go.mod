@@ -1,4 +1,4 @@
-module github.com/elimity-com/insights-sdk
+module github.com/elimity-com/insights-sdk/v2
 
 go 1.24.0
 
