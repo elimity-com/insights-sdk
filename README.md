@@ -6,7 +6,9 @@ Elimity Insights servers.
 ## Usage
 
 The following snippets shows how to implement a custom gateway that first validates Elimity Insights' JWT access token,
-then logs a message and finally streams an entity for each file in the requested directory.
+logs a message and streams an entity for each file in the requested directory. The gateway also sends back a cursor
+item for every nested directory it encounters. Elimity Insights will perform an additional request for each cursor it
+receives, in this example it means the gateway performs a complete recursive traversal of the requested directory.
 
 ### Go
 
@@ -14,6 +16,7 @@ then logs a message and finally streams an entity for each file in the requested
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,18 +26,20 @@ import (
 	"github.com/elimity-com/insights-sdk/v2"
 	"github.com/elimity-com/insights-sdk/v2/gen/elimity/insights/common/v1alpha1"
 	"github.com/elimity-com/insights-sdk/v2/gen/elimity/insights/customgateway/v1alpha2"
+	"google.golang.org/protobuf/types/known/structpb"
 	"iter"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 )
 
 func generateResponses(bytes []byte, cursor any) iter.Seq2[*v1alpha2.PerformImportResponse, error] {
 	generator := responseGenerator{
 		bytes:  bytes,
 		cursor: cursor,
-    }
+	}
 	return generator.generate
 }
 
@@ -48,7 +53,7 @@ func main() {
 	audiences := []string{"gateway"}
 	option := validator.WithCustomClaims(makeClaims)
 	validator, _ := validator.New(provider.KeyFunc, "RS256", "https://auth.elimity.com/", audiences, option)
-	innerHandler := insightssdk.Handler(generateResponses, nil, "v1.0.0")
+	innerHandler := insightssdk.Handler(generateResponses, "", "v1.0.0")
 	outerHandler := jwtmiddleware.New(validator.ValidateToken).CheckJWT(innerHandler)
 	err := http.ListenAndServe(":8080", outerHandler)
 	log.Fatal(err)
@@ -97,7 +102,9 @@ func (g responseGenerator) generate(yield func(*v1alpha2.PerformImportResponse, 
 	if !yield(response, nil) {
 		return
 	}
-	entries, err := os.ReadDir(request.Path)
+	cursor := g.cursor.(string)
+	path := cmp.Or(cursor, request.Path)
+	entries, err := os.ReadDir(path)
 	if err != nil {
 		err := fmt.Errorf("failed reading directory: %v", err)
 		yield(nil, err)
@@ -105,14 +112,24 @@ func (g responseGenerator) generate(yield func(*v1alpha2.PerformImportResponse, 
 	}
 	for _, entry := range entries {
 		name := entry.Name()
+		path := filepath.Join(path, name)
 		entity := &v1alpha1.Entity{
-			Id:   name,
+			Id:   path,
 			Name: name,
 			Type: "file",
 		}
 		ent := &v1alpha2.PerformImportResponse_Entity{Entity: entity}
-		response := &v1alpha2.PerformImportResponse{Value: ent}
-		if !yield(response, nil) {
+		entityResponse := &v1alpha2.PerformImportResponse{Value: ent}
+		if !yield(entityResponse, nil) {
+			return
+		}
+		if !entry.IsDir() {
+			continue
+		}
+		value, _ := structpb.NewValue(path)
+		cursor := &v1alpha2.PerformImportResponse_Cursor{Cursor: value}
+		cursorResponse := &v1alpha2.PerformImportResponse{Value: cursor}
+		if !yield(cursorResponse, nil) {
 			return
 		}
 	}
@@ -130,29 +147,40 @@ import { Item, ItemKind, Level, Value, handler } from "@elimity/insights-sdk";
 import { JsonValue } from "@bufbuild/protobuf";
 import { auth } from "express-oauth2-jwt-bearer";
 import express from "express";
-import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { opendir } from "node:fs/promises";
 import { z } from "zod";
 
 async function* generateItems(
   cursor: JsonValue,
   fields: Record<string, JsonValue>,
 ): AsyncGenerator<Item> {
+  if (typeof cursor != "string") return;
   const request = z.strictObject({ path: z.string() }).parse(fields);
   yield {
     kind: ItemKind.Log,
     level: Level.Info,
     message: "Reading directory contents",
   };
-  const files = await readdir(request.path);
-  for (const file of files) {
+  const path = cursor == "" ? request.path : cursor;
+  const dir = await opendir(path);
+  for await (const dirent of dir) {
     const assignments: Record<string, Value> = {};
+    const name = dirent.name;
+    const pat = join(path, name);
     yield {
       attributeAssignments: assignments,
-      id: file,
+      id: pat,
       kind: ItemKind.Entity,
-      name: file,
+      name,
       type: "file",
     };
+    const directory = dirent.isDirectory();
+    if (directory)
+      yield {
+        cursor: pat,
+        kind: ItemKind.Cursor,
+      };
   }
 }
 
@@ -167,7 +195,7 @@ const config = {
   validators,
 };
 const authHandler = auth(config);
-const sdkHandler = handler(generateItems, null, "v1.0.0");
+const sdkHandler = handler(generateItems, "", "v1.0.0");
 express().use(authHandler, sdkHandler).listen(8080);
 ```
 
@@ -175,11 +203,12 @@ express().use(authHandler, sdkHandler).listen(8080);
 
 ```python
 from collections.abc import AsyncIterator
-from os import listdir
+from os import scandir
+from os.path import join
 from typing import Literal
 
 from auth0_api_python import ApiClient, ApiClientOptions
-from elimity_insights_sdk import EntityItem, Item, Level, LogItem, Value, app
+from elimity_insights_sdk import CursorItem, EntityItem, Item, Level, LogItem, Value, app
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -211,14 +240,20 @@ class _Request(BaseModel):
 
 
 async def _generate_items(cursor: object, fields: dict[str, object]) -> AsyncIterator[Item]:
+    if not isinstance(cursor, str):
+        return
     request = _Request.model_validate(fields)
     yield LogItem(Level.INFO, "Reading directory contents")
-    for file in listdir(request.path):
+    path = request.path if cursor == "" else cursor
+    for entry in scandir(path):
         assignments: dict[str, Value] = {}
-        yield EntityItem(assignments, file, file, "file")
+        pat = entry.path
+        yield EntityItem(assignments, pat, entry.name, "file")
+        if entry.is_dir():
+            yield CursorItem(pat)
 
 
-_app = app(_generate_items, None, "v1.0.0")
+_app = app(_generate_items, "", "v1.0.0")
 _middleware = _Middleware(_app)
 run(_middleware)
 ```
