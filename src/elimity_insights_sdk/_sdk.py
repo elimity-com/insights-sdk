@@ -32,6 +32,11 @@ class BooleanValue:
 
 
 @dataclass
+class CursorItem:
+    cursor: object
+
+
+@dataclass
 class DateTimeValue:
     value: datetime
 
@@ -64,7 +69,7 @@ class RelationshipItem:
     to_entity_type: str
 
 
-Item = Union[EntityItem, LogItem, RelationshipItem]
+Item = Union[CursorItem, EntityItem, LogItem, RelationshipItem]
 
 
 class Level(Enum):
@@ -115,9 +120,8 @@ class _Service:
     async def meta(
         self, request: MetaRequest, ctx: RequestContext[object, object]
     ) -> MetaResponse:
-        value = StructValue()
-        ParseDict(self._initial_cursor, value)
-        return MetaResponse(initial_cursor=value, version=self._version)
+        initial_cursor = _make_struct_value(self._initial_cursor)
+        return MetaResponse(initial_cursor=initial_cursor, version=self._version)
 
     def perform_import(
         self, req: PerformImportRequest, ctx: RequestContext[object, object]
@@ -145,11 +149,42 @@ async def _generate_responses(
 def _make_assignments(assignments: dict[str, Value]) -> dict[str, CommonValue]:
     ass: dict[str, CommonValue] = {}
     for key, value in assignments.items():
-        ass[key] = _make_value(value)
+        ass[key] = _make_common_value(value)
     return ass
 
 
+def _make_common_value(value: Value) -> CommonValue:
+    if isinstance(value, BooleanValue):
+        return CommonValue(boolean=value.value)
+
+    if isinstance(value, DateTimeValue):
+        timestamp = _make_timestamp(value.value)
+        return CommonValue(date_time=timestamp)
+
+    if isinstance(value, DateValue):
+        date = value.value
+        dat = datetime(date.year, date.month, date.day)
+        timestamp = _make_timestamp(dat)
+        return CommonValue(date=timestamp)
+
+    if isinstance(value, NumberValue):
+        return CommonValue(number=value.value)
+
+    if isinstance(value, StringValue):
+        return CommonValue(string=value.value)
+
+    if isinstance(value, TimeValue):
+        time = value.value
+        dat = datetime(1, 1, 1, time.hour, time.minute, time.second)
+        timestamp = _make_timestamp(dat)
+        return CommonValue(time=timestamp)
+
+
 def _make_response(item: Item) -> PerformImportResponse:
+    if isinstance(item, CursorItem):
+        cursor = _make_struct_value(item.cursor)
+        return PerformImportResponse(cursor=cursor)
+
     if isinstance(item, EntityItem):
         assignments = _make_assignments(item.attribute_assignments)
         entity = Entity(
@@ -182,34 +217,13 @@ def _make_response(item: Item) -> PerformImportResponse:
         return PerformImportResponse(relationship=relationship)
 
 
+def _make_struct_value(value: object) -> StructValue:
+    val = StructValue()
+    ParseDict(value, val)
+    return val
+
+
 def _make_timestamp(datetime: datetime) -> Timestamp:
     timestamp = Timestamp()
     timestamp.FromDatetime(datetime)
     return timestamp
-
-
-def _make_value(value: Value) -> CommonValue:
-    if isinstance(value, BooleanValue):
-        return CommonValue(boolean=value.value)
-
-    if isinstance(value, DateTimeValue):
-        timestamp = _make_timestamp(value.value)
-        return CommonValue(date_time=timestamp)
-
-    if isinstance(value, DateValue):
-        date = value.value
-        dat = datetime(date.year, date.month, date.day)
-        timestamp = _make_timestamp(dat)
-        return CommonValue(date=timestamp)
-
-    if isinstance(value, NumberValue):
-        return CommonValue(number=value.value)
-
-    if isinstance(value, StringValue):
-        return CommonValue(string=value.value)
-
-    if isinstance(value, TimeValue):
-        time = value.value
-        dat = datetime(1, 1, 1, time.hour, time.minute, time.second)
-        timestamp = _make_timestamp(dat)
-        return CommonValue(time=timestamp)
