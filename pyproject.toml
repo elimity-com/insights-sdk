@@ -4,16 +4,15 @@ requires = ["poetry-core>=1.0.0"]
 
 [dependency-groups]
 dev = [
-    "protoletariat (>=3.3.10,<4)",
     "mypy (>=1.18.2,<2)",
-    "types-protobuf (>=5.29.1.20250403,<6)",
     "black (>=26.3.1,<27.0.0)",
     "isort (>=6.0.1,<7.0.0)"
 ]
 
 [project]
 dependencies = [
-    "connect-python (>=0.5.0,<0.6)",
+    "connectrpc (>=0.11.1,<0.12)",
+    "protobuf-py (>=0.1.1,<0.2)",
 ]
 requires-python = ">=3.10,<4"
 name = "elimity-insights-sdk"

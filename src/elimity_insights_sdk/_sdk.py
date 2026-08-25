@@ -1,29 +1,32 @@
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from enum import Enum, auto
-from typing import Union
+from typing import Literal, TypeAlias, Union, cast
 
 from connectrpc.request import RequestContext
-from elimity.insights.common.v1alpha1.common_pb2 import Entity, Relationship
-from elimity.insights.common.v1alpha1.common_pb2 import Value as CommonValue
+from elimity.insights.common.v1alpha1.common_pb import Entity, Relationship
+from elimity.insights.common.v1alpha1.common_pb import Value as CommonValue
 from elimity.insights.customgateway.v1alpha2.customgateway_connect import (
     ServiceASGIApplication,
 )
-from elimity.insights.customgateway.v1alpha2.customgateway_pb2 import (
+from elimity.insights.customgateway.v1alpha2.customgateway_pb import (
     Level as GatewayLevel,
 )
-from elimity.insights.customgateway.v1alpha2.customgateway_pb2 import (
+from elimity.insights.customgateway.v1alpha2.customgateway_pb import (
     Log,
     MetaRequest,
     MetaResponse,
     PerformImportRequest,
     PerformImportResponse,
 )
-from google.protobuf.empty_pb2 import Empty
-from google.protobuf.json_format import MessageToDict, ParseDict
-from google.protobuf.struct_pb2 import Value as StructValue
-from google.protobuf.timestamp_pb2 import Timestamp
+from protobuf import Oneof
+from protobuf.wkt import Empty, Timestamp
+from protobuf.wkt import Value as StructValue
+
+_ValueParam: TypeAlias = Union[
+    None, bool, int, float, str, Sequence["_ValueParam"], Mapping[str, "_ValueParam"]
+]
 
 
 @dataclass
@@ -118,23 +121,25 @@ class _Service:
         self._version = version
 
     async def meta(
-        self, request: MetaRequest, ctx: RequestContext[object, object]
+        self, request: MetaRequest, ctx: RequestContext[MetaRequest, MetaResponse]
     ) -> MetaResponse:
         initial_cursor = _make_struct_value(self._initial_cursor)
         return MetaResponse(initial_cursor=initial_cursor, version=self._version)
 
     def perform_import(
-        self, req: PerformImportRequest, ctx: RequestContext[object, object]
+        self,
+        req: PerformImportRequest,
+        ctx: RequestContext[PerformImportRequest, PerformImportResponse],
     ) -> AsyncIterator[PerformImportResponse]:
         expected_version = self._version
         actual_version = req.version
         if expected_version != actual_version:
             message = f"expected request to have version {expected_version} instead of {actual_version}"
             raise BaseException(message)
-        cursor = MessageToDict(req.cursor)
+        cursor = req.cursor.to_python() if req.cursor is not None else None
         fields: dict[str, object] = {}
         for key, value in req.fields.items():
-            fields[key] = MessageToDict(value)
+            fields[key] = value.to_python()
         items = self._fun(cursor, fields)
         return _generate_responses(items)
 
@@ -155,35 +160,42 @@ def _make_assignments(assignments: dict[str, Value]) -> dict[str, CommonValue]:
 
 def _make_common_value(value: Value) -> CommonValue:
     if isinstance(value, BooleanValue):
-        return CommonValue(boolean=value.value)
+        boolean_oneof = Oneof[Literal["boolean"], bool]("boolean", value.value)
+        return CommonValue(value=boolean_oneof)
 
     if isinstance(value, DateTimeValue):
         timestamp = _make_timestamp(value.value)
-        return CommonValue(date_time=timestamp)
+        date_time_oneof = Oneof[Literal["date_time"], Timestamp]("date_time", timestamp)
+        return CommonValue(value=date_time_oneof)
 
     if isinstance(value, DateValue):
         date = value.value
         dat = datetime(date.year, date.month, date.day)
         timestamp = _make_timestamp(dat)
-        return CommonValue(date=timestamp)
+        date_oneof = Oneof[Literal["date"], Timestamp]("date", timestamp)
+        return CommonValue(value=date_oneof)
 
     if isinstance(value, NumberValue):
-        return CommonValue(number=value.value)
+        number_oneof = Oneof[Literal["number"], float]("number", value.value)
+        return CommonValue(value=number_oneof)
 
     if isinstance(value, StringValue):
-        return CommonValue(string=value.value)
+        string_oneof = Oneof[Literal["string"], str]("string", value.value)
+        return CommonValue(value=string_oneof)
 
     if isinstance(value, TimeValue):
         time = value.value
         dat = datetime(1, 1, 1, time.hour, time.minute, time.second)
         timestamp = _make_timestamp(dat)
-        return CommonValue(time=timestamp)
+        time_oneof = Oneof[Literal["time"], Timestamp]("time", timestamp)
+        return CommonValue(value=time_oneof)
 
 
 def _make_response(item: Item) -> PerformImportResponse:
     if isinstance(item, CursorItem):
         cursor = _make_struct_value(item.cursor)
-        return PerformImportResponse(cursor=cursor)
+        cursor_oneof = Oneof[Literal["cursor"], StructValue]("cursor", cursor)
+        return PerformImportResponse(value=cursor_oneof)
 
     if isinstance(item, EntityItem):
         assignments = _make_assignments(item.attribute_assignments)
@@ -193,17 +205,20 @@ def _make_response(item: Item) -> PerformImportResponse:
             name=item.name,
             type=item.type,
         )
-        return PerformImportResponse(entity=entity)
+        entity_oneof = Oneof[Literal["entity"], Entity]("entity", entity)
+        return PerformImportResponse(value=entity_oneof)
 
     if isinstance(item, LogItem):
         empty = Empty()
-        level = (
-            GatewayLevel(alert=empty)
-            if item.level is Level.ALERT
-            else GatewayLevel(info=empty)
-        )
+        if item.level is Level.ALERT:
+            alert_oneof = Oneof[Literal["alert"], Empty]("alert", empty)
+            level = GatewayLevel(value=alert_oneof)
+        else:
+            info_oneof = Oneof[Literal["info"], Empty]("info", empty)
+            level = GatewayLevel(value=info_oneof)
         log = Log(level=level, message=item.message)
-        return PerformImportResponse(log=log)
+        log_oneof = Oneof[Literal["log"], Log]("log", log)
+        return PerformImportResponse(value=log_oneof)
 
     if isinstance(item, RelationshipItem):
         assignments = _make_assignments(item.attribute_assignments)
@@ -214,16 +229,17 @@ def _make_response(item: Item) -> PerformImportResponse:
             to_entity_id=item.to_entity_id,
             to_entity_type=item.to_entity_type,
         )
-        return PerformImportResponse(relationship=relationship)
+        relationship_oneof = Oneof[Literal["relationship"], Relationship](
+            "relationship", relationship
+        )
+        return PerformImportResponse(value=relationship_oneof)
 
 
 def _make_struct_value(value: object) -> StructValue:
-    val = StructValue()
-    ParseDict(value, val)
-    return val
+    return StructValue.from_python(cast("_ValueParam", value))
 
 
-def _make_timestamp(datetime: datetime) -> Timestamp:
-    timestamp = Timestamp()
-    timestamp.FromDatetime(datetime)
-    return timestamp
+def _make_timestamp(dt: datetime) -> Timestamp:
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return Timestamp.from_datetime(dt)
