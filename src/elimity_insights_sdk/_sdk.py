@@ -1,8 +1,9 @@
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from enum import Enum, auto
-from typing import Literal, TypeAlias, Union, cast
+from json import dumps
+from typing import Literal, Union
 
 from connectrpc.request import RequestContext
 from elimity.insights.common.v1alpha1.common_pb import Entity, Relationship
@@ -23,10 +24,6 @@ from elimity.insights.customgateway.v1alpha2.customgateway_pb import (
 from protobuf import Oneof
 from protobuf.wkt import Empty, Timestamp
 from protobuf.wkt import Value as StructValue
-
-_ValueParam: TypeAlias = Union[
-    None, bool, int, float, str, Sequence["_ValueParam"], Mapping[str, "_ValueParam"]
-]
 
 
 @dataclass
@@ -191,6 +188,15 @@ def _make_common_value(value: Value) -> CommonValue:
         return CommonValue(value=time_oneof)
 
 
+def _make_level(level: Level) -> GatewayLevel:
+    empty = Empty()
+    if level is Level.ALERT:
+        alert_oneof = Oneof[Literal["alert"], Empty]("alert", empty)
+        return GatewayLevel(value=alert_oneof)
+    info_oneof = Oneof[Literal["info"], Empty]("info", empty)
+    return GatewayLevel(value=info_oneof)
+
+
 def _make_response(item: Item) -> PerformImportResponse:
     if isinstance(item, CursorItem):
         cursor = _make_struct_value(item.cursor)
@@ -209,13 +215,7 @@ def _make_response(item: Item) -> PerformImportResponse:
         return PerformImportResponse(value=entity_oneof)
 
     if isinstance(item, LogItem):
-        empty = Empty()
-        if item.level is Level.ALERT:
-            alert_oneof = Oneof[Literal["alert"], Empty]("alert", empty)
-            level = GatewayLevel(value=alert_oneof)
-        else:
-            info_oneof = Oneof[Literal["info"], Empty]("info", empty)
-            level = GatewayLevel(value=info_oneof)
+        level = _make_level(item.level)
         log = Log(level=level, message=item.message)
         log_oneof = Oneof[Literal["log"], Log]("log", log)
         return PerformImportResponse(value=log_oneof)
@@ -236,7 +236,8 @@ def _make_response(item: Item) -> PerformImportResponse:
 
 
 def _make_struct_value(value: object) -> StructValue:
-    return StructValue.from_python(cast("_ValueParam", value))
+    json = dumps(value)
+    return StructValue.from_json(json)
 
 
 def _make_timestamp(dt: datetime) -> Timestamp:
