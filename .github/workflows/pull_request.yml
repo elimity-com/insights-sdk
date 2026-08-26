@@ -20,8 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: buf generate
-      - run: poetry install
-      - run: poetry run protol -o gen/elimity --create-package --in-place buf
       - run: touch gen/elimity/py.typed
       - run: git -c safe.directory=/__w/insights-sdk/insights-sdk diff --quiet
 
